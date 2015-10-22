@@ -1,0 +1,104 @@
+//--------------------------------------
+//--- 010 Editor v6.0 Binary Template
+//
+// File: grs.bt
+// Author: Benjamin Johnson
+// Revision: 1.0
+// Purpose: Read the Grass Map .grs files for tracks in Codemasters Racing Games
+//--------------------------------------
+
+LittleEndian();
+
+typedef struct {
+    float x;
+    float y;
+    float z;
+} VECTOR3;
+
+typedef struct {
+    hfloat w;
+    hfloat x;
+    hfloat y;
+    hfloat z;
+
+
+} VECTOR4;
+
+typedef struct {
+    hfloat x;
+    hfloat y;
+} VECTOR2;
+
+
+// Headers are batched together, the main data is grouped together referenced from offset pointers
+typedef struct {
+   int startOffset; // Position where the data begins
+   int endOffset;   // Position where data ends
+
+   local int ptr = FTell(); // Store current position for later reference 
+
+   FSeek(startOffset); // Go to data
+
+    // Data Section header, contains element counts
+   short vectorCount <bgcolor=cLtGreen>;
+   int valueCount <bgcolor=cLtGreen>;
+   short padding[5] <bgcolor=cLtGreen>; // Padding always zero
+
+   float bounding[6]  <bgcolor=cLtGreen>; // most likely the bounding box for the ground cover patch, unconfirmed
+   VECTOR4 values[vectorCount] <bgcolor=cLtRed>; // Believe these are relative coordinate to bounds min, w value is unknown 
+   VECTOR2 values2[valueCount] <bgcolor=cLtBlue>; // Have no idea what these values might be. Probably hfloats, though sometimes maps to valid floats
+   int tailPadding[2];
+
+   FSeek(ptr);
+} GRASSPATCH <optimize=false>;
+
+typedef struct {
+    VECTOR3 position[12];
+    
+    float someValues[12];
+} FLOATSECTION;
+
+typedef struct {
+    float values[204]  <bgcolor=cLtBlue>;
+} ALTSECTION;
+
+typedef struct {
+    string type;
+byte padd;
+    int pad[2];
+} TYPE <optimize=false>;
+
+typedef struct {
+    // Jump to end of section. TypeGroup is weird, subtype count is at the tail of section
+    // Typegroup have a fixed sized. What is not used is padded
+    local int ptr = FTell();
+    local int tailOffset = 128;
+    FSeek(ptr + tailOffset);
+    int typesCount;
+  
+    FSeek(ptr);
+    TYPE types[typesCount];
+    local int remainingSlots = 8 - typesCount; // So far 8 slots for subtypes are allocated
+    int pad[remainingSlots * 4]; // What is remaining of the 8 slots is padded
+    int typeCount2 <hidden=true>; // Read in the type count again to finish
+    float unknownValue;
+    string name;
+    int endPadding[2];
+} TYPEGROUP <optimize=false>;
+
+// Header
+int version; // Version/Magic always at the beginning of grs file
+int typeCount; // Number of ground cover types in a file, models found in groundcover.pssg
+int groundCoverPatchCount; // Instance group count
+int pad;
+
+
+FLOATSECTION floats[typeCount];
+ALTSECTION some[1]; // Always seems to be 204 floats, maybe parameters
+FSeek(2416);
+
+TYPEGROUP types[typeCount]; // Read in the type names, still not sure how they are referenced
+FSeek(3632);
+int numberOfTypeGroups; // Not sure why this is here, maybe typeCount is different from this value
+
+GRASSPATCH groundCoverPatches[groundCoverPatchCount]; // Read in the sections
